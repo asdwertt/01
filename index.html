@@ -85,8 +85,9 @@
         th { background: #f8fafc; color: var(--text-muted); font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; border-bottom: 2px solid var(--border); white-space: nowrap; }
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { color: var(--primary); background: #eef2ff; }
-        th .filter-icon { font-size: .65rem; margin-left: 4px; cursor: pointer; opacity: .4; vertical-align: middle; }
-        th .filter-icon:hover, th .filter-icon.active { opacity: 1; color: var(--primary); }
+        th .filter-icon { font-size: .75rem; margin-left: 6px; cursor: pointer; opacity: .35; vertical-align: middle; transition: opacity .15s; }
+        th .filter-icon:hover { opacity: .8; }
+        th .filter-icon.active { opacity: 1; color: var(--primary); }
         .filter-dropdown {
             position: absolute; background: var(--card); border: 1px solid var(--border);
             border-radius: var(--radius-sm); box-shadow: 0 8px 30px rgba(0,0,0,.12);
@@ -602,13 +603,18 @@
             app.categories.forEach(c => { catMap[c.id] = c.name; });
 
             function th(col, label, filterable) {
-                const arrow = sortColumn === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+                let sortArrow = '<span style="font-size:.7rem;opacity:.3;margin-right:2px;">⇅</span>';
+                if (sortColumn === col) {
+                    sortArrow = sortDir === 'asc'
+                        ? '<span style="font-size:.7rem;color:var(--primary);margin-right:2px;">▲</span>'
+                        : '<span style="font-size:.7rem;color:var(--primary);margin-right:2px;">▼</span>';
+                }
                 let filterIcon = '';
                 if (filterable) {
                     const hasFilter = filters[col] && filters[col].size > 0;
-                    filterIcon = `<span class="filter-icon${hasFilter ? ' active' : ''}" onclick="toggleFilter('${col}',event)" title="筛选">▼</span>`;
+                    filterIcon = `<span class="filter-icon${hasFilter ? ' active' : ''}" onclick="toggleFilter('${col}',event)" title="筛选" style="margin-left:6px;font-size:.75rem;">🔽</span>`;
                 }
-                return `<th class="sortable" onclick="setSort('${col}')">${label}${arrow}${filterIcon}</th>`;
+                return `<th class="sortable" onclick="setSort('${col}')">${sortArrow}${label}${filterIcon}</th>`;
             }
 
             const extraTh = hasExtra ? th('extra', escHtml(extraField), false) : '';
