@@ -967,12 +967,14 @@
                     try {
                         const data = JSON.parse(reader.result);
                         if (!data.categories || !data.products) throw new Error('格式错误');
-                        const msg = `即将导入 ${data.categories.length} 个分类、${data.brands ? data.brands.length : 0} 个品牌、${data.products.length} 件商品。\n\n点击「确定」覆盖现有数据\n点击「取消」新增到现有数据`;
-                        const isOverwrite = confirm(msg);
+                        const summary = `检测到 ${data.categories.length} 个分类、${data.brands ? data.brands.length : 0} 个品牌、${data.products.length} 件商品。\n\n确定要导入吗？`;
+                        if (!confirm(summary)) return; // 取消
+
+                        const isOverwrite = confirm('请选择导入方式：\n\n「确定」= 覆盖现有数据\n「取消」= 新增到现有数据');
                         if (isOverwrite) {
                             app = data;
+                            toast('数据已覆盖导入');
                         } else {
-                            // 新增合并
                             const existIds = new Set(app.products.map(p => p.id));
                             const existCatIds = new Set(app.categories.map(c => c.id));
                             const existBrandIds = new Set((app.brands || []).map(b => b.id));
@@ -995,7 +997,6 @@
                         selectedCategoryId = null;
                         persist();
                         renderAll();
-                        toast(isOverwrite ? '数据已覆盖导入' : '');
                     } catch(e) { toast('导入失败：文件格式不正确'); }
                 };
                 reader.readAsText(file);
