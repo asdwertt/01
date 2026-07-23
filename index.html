@@ -140,7 +140,6 @@
     <div class="header">
         <h1><span class="icon">📦</span>商品管理系统</h1>
         <div class="header-actions">
-            <span id="syncBadge" style="font-size:.78rem;font-weight:600;display:flex;align-items:center;gap:4px;margin-right:8px;">🟡 连接中…</span>
             <button class="btn btn-outline btn-sm" onclick="exportData()">📥 导出数据</button>
             <button class="btn btn-outline btn-sm" onclick="importData()">📤 导入数据</button>
             <button class="btn btn-primary btn-sm" onclick="exportExcel()">📊 导出Excel</button>
@@ -236,126 +235,19 @@
 
     <script>
         const STORAGE_KEY = 'product_mgr_data_v2';
-        const DEFAULT_DATA = { categories: [], brands: [], products: [] };
 
-        // ──────────────── GitHub 配置 ────────────────
-        // ⚠️ 创建 Token: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
-        //    只选 asdwertt/01 仓库，权限给 Contents (Read and write)，生成后把 Token 贴到下面
-        const GITHUB_TOKEN = 'github_pat_YOUR_TOKEN_HERE';
-        const REPO_OWNER = 'asdwertt';
-        const REPO_NAME = '01';
-        const DATA_FILE = 'data.json';
-        const API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DATA_FILE}`;
-
-        // ──────────────── 数据层 ────────────────
-        let app = loadLocal();
-        let currentSha = null;       // GitHub 文件版本，防止冲突覆盖
-        let syncReady = false;
-        let initialRenderDone = false;
-
-        function loadLocal() {
+        function loadData() {
             try {
                 const raw = localStorage.getItem(STORAGE_KEY);
                 if (raw) return JSON.parse(raw);
             } catch(e) {}
-            return JSON.parse(JSON.stringify(DEFAULT_DATA));
+            return { categories: [], brands: [], products: [] };
         }
 
-        function saveLocal(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+        function saveData(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
 
-        async function loadFromGitHub() {
-            const resp = await fetch(API_URL, {
-                headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
-            });
-            if (!resp.ok) return null;
-            const file = await resp.json();
-            currentSha = file.sha;
-            return JSON.parse(atob(file.content));
-        }
-
-        async function saveToGitHub(data) {
-            const body = {
-                message: '📦 更新商品数据',
-                content: btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))))
-            };
-            if (currentSha) body.sha = currentSha;
-
-            const resp = await fetch(API_URL, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `token ${GITHUB_TOKEN}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(body)
-            });
-            if (!resp.ok) {
-                const err = await resp.json();
-                if (err.message && /sha/i.test(err.message)) throw new Error('conflict');
-                throw new Error(err.message || 'save failed');
-            }
-            const result = await resp.json();
-            currentSha = result.content.sha;
-        }
-
-        async function initGitHubSync() {
-            try {
-                const remoteData = await loadFromGitHub();
-                if (remoteData) {
-                    migrateData(remoteData);
-                    app = remoteData;
-                    saveLocal(app);
-                } else {
-                    await saveToGitHub(app);
-                }
-                syncReady = true;
-                document.getElementById('syncBadge').textContent = '🟢 已同步';
-                document.getElementById('syncBadge').style.color = '#059669';
-            } catch(e) {
-                console.warn('GitHub 加载失败，使用本地数据', e);
-                syncReady = false;
-                document.getElementById('syncBadge').textContent = '🔴 离线';
-                document.getElementById('syncBadge').style.color = '#ef4444';
-            }
-            if (!initialRenderDone) { initialRenderDone = true; renderAll(); }
-        }
-
-        function mergeData(remote, local) {
-            const merged = JSON.parse(JSON.stringify(remote));
-            const remoteIds = new Set(remote.products.map(p => p.id));
-            const remoteCatIds = new Set(remote.categories.map(c => c.id));
-            const remoteBrandIds = new Set((remote.brands || []).map(b => b.id));
-            local.products.forEach(p => { if (!remoteIds.has(p.id)) merged.products.push(p); });
-            local.categories.forEach(c => { if (!remoteCatIds.has(c.id)) merged.categories.push(c); });
-            (local.brands || []).forEach(b => { if (!remoteBrandIds.has(b.id)) merged.brands.push(b); });
-            return merged;
-        }
-
-        function persist() {
-            saveLocal(app);
-            if (syncReady) {
-                saveToGitHub(app).catch(async (e) => {
-                    if (e.message === 'conflict') {
-                        toast('⚠️ 数据冲突，正在合并…');
-                        try {
-                            const remoteData = await loadFromGitHub();
-                            if (remoteData) {
-                                const merged = mergeData(remoteData, app);
-                                migrateData(merged);
-                                app = merged;
-                                await saveToGitHub(app);
-                                saveLocal(app);
-                                renderAll();
-                                toast('✅ 数据已合并同步');
-                            }
-                        } catch(e2) {
-                            toast('⚠️ 同步失败，请刷新重试');
-                        }
-                    } else {
-                        toast('⚠️ 同步失败，数据已保存到本地');
-                    }
-                });
-            }
-        }
+        let app = loadData();
+        function persist() { saveData(app); }
         // 数据兼容性迁移
         function migrateData(data) {
             if (!data.brands) data.brands = [];
@@ -806,7 +698,7 @@
         document.getElementById('categoryModal').addEventListener('click', function(e) { if (e.target === this) closeCategoryModal(); });
         document.getElementById('productModal').addEventListener('click', function(e) { if (e.target === this) closeProductModal(); });
 
-        initGitHubSync();
+        renderAll();
     </script>
 </body>
 </html>
