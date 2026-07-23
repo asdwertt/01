@@ -967,13 +967,35 @@
                     try {
                         const data = JSON.parse(reader.result);
                         if (!data.categories || !data.products) throw new Error('格式错误');
-                        if (!confirm(`即将导入 ${data.categories.length} 个分类、${data.brands? data.brands.length : 0} 个品牌、${data.products.length} 件商品，当前数据将被覆盖。确定？`)) return;
-                        app = data;
+                        const msg = `即将导入 ${data.categories.length} 个分类、${data.brands ? data.brands.length : 0} 个品牌、${data.products.length} 件商品。\n\n点击「确定」覆盖现有数据\n点击「取消」新增到现有数据`;
+                        const isOverwrite = confirm(msg);
+                        if (isOverwrite) {
+                            app = data;
+                        } else {
+                            // 新增合并
+                            const existIds = new Set(app.products.map(p => p.id));
+                            const existCatIds = new Set(app.categories.map(c => c.id));
+                            const existBrandIds = new Set((app.brands || []).map(b => b.id));
+                            const existBrandNames = new Set((app.brands || []).map(b => b.name.toLowerCase()));
+                            let addedP = 0, addedC = 0, addedB = 0;
+                            data.products.forEach(p => {
+                                if (!existIds.has(p.id)) { app.products.push(p); existIds.add(p.id); addedP++; }
+                            });
+                            data.categories.forEach(c => {
+                                if (!existCatIds.has(c.id)) { app.categories.push(c); existCatIds.add(c.id); addedC++; }
+                            });
+                            (data.brands || []).forEach(b => {
+                                if (!existBrandIds.has(b.id) && !existBrandNames.has(b.name.toLowerCase())) {
+                                    app.brands.push(b); existBrandIds.add(b.id); existBrandNames.add(b.name.toLowerCase()); addedB++;
+                                }
+                            });
+                            toast(`新增：${addedP} 件商品、${addedC} 个分类、${addedB} 个品牌`);
+                        }
                         migrateData(app);
                         selectedCategoryId = null;
                         persist();
                         renderAll();
-                        toast('数据已导入');
+                        toast(isOverwrite ? '数据已覆盖导入' : '');
                     } catch(e) { toast('导入失败：文件格式不正确'); }
                 };
                 reader.readAsText(file);
