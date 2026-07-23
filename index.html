@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>商品管理系统</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
     <style>
         :root {
             --primary: #6366f1;
@@ -140,6 +143,7 @@
     <div class="header">
         <h1><span class="icon">📦</span>商品管理系统</h1>
         <div class="header-actions">
+            <span id="syncBadge" style="font-size:.78rem;font-weight:600;display:flex;align-items:center;gap:4px;margin-right:8px;">🟡 连接中…</span>
             <button class="btn btn-outline btn-sm" onclick="exportData()">📥 导出数据</button>
             <button class="btn btn-outline btn-sm" onclick="importData()">📤 导入数据</button>
             <button class="btn btn-primary btn-sm" onclick="exportExcel()">📊 导出Excel</button>
@@ -235,30 +239,114 @@
 
     <script>
         const STORAGE_KEY = 'product_mgr_data_v2';
+        const DEFAULT_DATA = { categories: [], brands: [], products: [] };
 
-        function loadData() {
+        // ──────────────── Firebase 配置 ────────────────
+        // ⚠️ 请替换为你自己的 Firebase 配置（去 Firebase 控制台 → 项目设置 → 添加 Web 应用）
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // ──────────────── 数据层 ────────────────
+        let app = loadLocal();
+        let firebaseReady = false;
+        let syncing = false;        // 防止自己写入触发的 onValue 回调导致循环
+        let initialRenderDone = false;
+
+        function loadLocal() {
             try {
                 const raw = localStorage.getItem(STORAGE_KEY);
                 if (raw) return JSON.parse(raw);
             } catch(e) {}
-            return { categories: [], brands: [], products: [] };
+            return JSON.parse(JSON.stringify(DEFAULT_DATA));
         }
 
-        function saveData(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+        function saveLocal(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
 
-        let app = loadData();
-        if (!app.brands) app.brands = [];
-        app.products.forEach(p => { if (typeof p.id === 'number') p.id = String(p.id); });
-        app.categories.forEach(c => { if (typeof c.id === 'number') c.id = String(c.id); });
-        // 兼容旧数据：accuracy -> extraValue
-        app.products.forEach(p => {
-            if (p.accuracy != null && p.extraValue == null) { p.extraValue = p.accuracy; delete p.accuracy; }
-        });
+        // 初始化 Firebase 实时同步
+        function initFirebase() {
+            try {
+                firebase.initializeApp(firebaseConfig);
+                const db = firebase.database();
+                const dataRef = db.ref('appData');
+
+                // 监听远程数据变化
+                dataRef.on('value', (snapshot) => {
+                    if (syncing) return; // 跳过自己触发的更新
+                    const remoteData = snapshot.val();
+                    if (remoteData && typeof remoteData === 'object') {
+                        migrateData(remoteData);
+                        app = remoteData;
+                        saveLocal(app);
+                        if (initialRenderDone) renderAll();
+                    }
+                });
+
+                // 首次连接：判断用远程还是本地数据
+                dataRef.once('value').then((snapshot) => {
+                    const remoteData = snapshot.val();
+                    if (remoteData && typeof remoteData === 'object') {
+                        // 远程有数据 → 使用远程
+                        migrateData(remoteData);
+                        app = remoteData;
+                        saveLocal(app);
+                    } else {
+                        // 远程无数据 → 把本地推上去
+                        syncing = true;
+                        dataRef.set(app).then(() => { syncing = false; });
+                    }
+                    firebaseReady = true;
+                    if (!initialRenderDone) { initialRenderDone = true; renderAll(); }
+                    document.getElementById('syncBadge').textContent = '🟢 已同步';
+                    document.getElementById('syncBadge').style.color = '#059669';
+                }).catch((err) => {
+                    console.warn('Firebase 连接失败，使用本地数据', err);
+                    firebaseReady = false;
+                    if (!initialRenderDone) { initialRenderDone = true; renderAll(); }
+                    document.getElementById('syncBadge').textContent = '🔴 离线';
+                    document.getElementById('syncBadge').style.color = '#ef4444';
+                });
+
+            } catch(e) {
+                console.warn('Firebase 初始化失败，使用本地数据', e);
+                firebaseReady = false;
+                if (!initialRenderDone) { initialRenderDone = true; renderAll(); }
+                document.getElementById('syncBadge').textContent = '🔴 离线';
+                document.getElementById('syncBadge').style.color = '#ef4444';
+            }
+        }
+
+        function persist() {
+            saveLocal(app);
+            if (firebaseReady) {
+                syncing = true;
+                firebase.database().ref('appData').set(app).then(() => {
+                    syncing = false;
+                }).catch(() => {
+                    syncing = false;
+                    toast('⚠️ 同步失败，数据已保存到本地');
+                });
+            }
+        }
+        // 数据兼容性迁移
+        function migrateData(data) {
+            if (!data.brands) data.brands = [];
+            data.products.forEach(p => { if (typeof p.id === 'number') p.id = String(p.id); });
+            data.categories.forEach(c => { if (typeof c.id === 'number') c.id = String(c.id); });
+            data.products.forEach(p => {
+                if (p.accuracy != null && p.extraValue == null) { p.extraValue = p.accuracy; delete p.accuracy; }
+            });
+        }
+        migrateData(app);
 
         let selectedCategoryId = null;
         let searchKeyword = '';
-
-        function persist() { saveData(app); }
 
         // 获取当前选中分类的 extraField
         function getCurrentExtraField() {
@@ -674,10 +762,7 @@
                         if (!data.categories || !data.products) throw new Error('格式错误');
                         if (!confirm(`即将导入 ${data.categories.length} 个分类、${data.brands? data.brands.length : 0} 个品牌、${data.products.length} 件商品，当前数据将被覆盖。确定？`)) return;
                         app = data;
-                        if (!app.brands) app.brands = [];
-                        app.products.forEach(p => { if (typeof p.id === 'number') p.id = String(p.id); });
-                        app.categories.forEach(c => { if (typeof c.id === 'number') c.id = String(c.id); });
-                        app.products.forEach(p => { if (p.accuracy != null && p.extraValue == null) { p.extraValue = p.accuracy; delete p.accuracy; } });
+                        migrateData(app);
                         selectedCategoryId = null;
                         persist();
                         renderAll();
@@ -700,7 +785,7 @@
         document.getElementById('categoryModal').addEventListener('click', function(e) { if (e.target === this) closeCategoryModal(); });
         document.getElementById('productModal').addEventListener('click', function(e) { if (e.target === this) closeProductModal(); });
 
-        renderAll();
+        initFirebase();
     </script>
 </body>
 </html>
