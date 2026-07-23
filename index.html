@@ -213,20 +213,12 @@
             </div>
 
             <label>规格</label>
-            <div class="select-row">
-                <select id="productModelSelect">
-                    <option value="">-- 请选择或输入规格 --</option>
-                </select>
-                <button class="btn btn-outline btn-sm" onclick="quickAddModel()" title="快速添加规格">＋</button>
-            </div>
+            <input id="productModelInput" list="modelList" placeholder="输入规格，已有值会自动提示…" maxlength="50" autocomplete="off">
+            <datalist id="modelList"></datalist>
 
             <label id="productNameLabel">商品名称（可选）</label>
-            <div class="select-row">
-                <select id="productNameSelect">
-                    <option value="">-- 请选择或输入名称 --</option>
-                </select>
-                <button class="btn btn-outline btn-sm" onclick="quickAddName()" title="快速添加名称">＋</button>
-            </div>
+            <input id="productNameInput" list="nameList" placeholder="输入名称，已有值会自动提示…" maxlength="80" autocomplete="off">
+            <datalist id="nameList"></datalist>
 
             <!-- 动态额外字段 -->
             <label id="extraFieldLabel" style="display:none"></label>
@@ -546,66 +538,25 @@
         }
 
         function fillModelSelect(catId) {
-            const sel = document.getElementById('productModelSelect');
-            const currentVal = sel.value;
+            const dl = document.getElementById('modelList');
             const values = new Set();
             if (catId) {
                 app.products.filter(p => p.categoryId === catId).forEach(p => {
                     if (p.model) values.add(p.model);
                 });
             }
-            sel.innerHTML = '<option value="">-- 请选择或输入规格 --</option>' +
-                [...values].map(v => `<option value="${escAttr(v)}">${escHtml(v)}</option>`).join('');
-            sel.value = currentVal;
+            dl.innerHTML = [...values].map(v => `<option value="${escAttr(v)}">`).join('');
         }
 
         function fillNameSelect(catId) {
-            const sel = document.getElementById('productNameSelect');
-            const currentVal = sel.value;
+            const dl = document.getElementById('nameList');
             const values = new Set();
             if (catId) {
                 app.products.filter(p => p.categoryId === catId).forEach(p => {
                     if (p.name) values.add(p.name);
                 });
             }
-            sel.innerHTML = '<option value="">-- 请选择或输入名称 --</option>' +
-                [...values].map(v => `<option value="${escAttr(v)}">${escHtml(v)}</option>`).join('');
-            sel.value = currentVal;
-        }
-
-        function quickAddModel() {
-            const name = prompt('输入新规格：');
-            if (!name || !name.trim()) return;
-            const trimmed = name.trim();
-            const sel = document.getElementById('productModelSelect');
-            // 检查是否已存在
-            for (let i = 0; i < sel.options.length; i++) {
-                if (sel.options[i].value === trimmed) {
-                    sel.value = trimmed;
-                    toast('该规格已在列表中');
-                    return;
-                }
-            }
-            sel.innerHTML += `<option value="${escAttr(trimmed)}">${escHtml(trimmed)}</option>`;
-            sel.value = trimmed;
-            toast('规格已添加并选中');
-        }
-
-        function quickAddName() {
-            const name = prompt('输入新商品名称：');
-            if (!name || !name.trim()) return;
-            const trimmed = name.trim();
-            const sel = document.getElementById('productNameSelect');
-            for (let i = 0; i < sel.options.length; i++) {
-                if (sel.options[i].value === trimmed) {
-                    sel.value = trimmed;
-                    toast('该名称已在列表中');
-                    return;
-                }
-            }
-            sel.innerHTML += `<option value="${escAttr(trimmed)}">${escHtml(trimmed)}</option>`;
-            sel.value = trimmed;
-            toast('名称已添加并选中');
+            dl.innerHTML = [...values].map(v => `<option value="${escAttr(v)}">`).join('');
         }
 
         // ──────────────── Actions: Product ────────────────
@@ -646,8 +597,8 @@
             idInput.value = '';
             idInput.readOnly = false;
 
-            document.getElementById('productBrandSelect').value = '';            document.getElementById('productModelSelect').value = '';
-            document.getElementById('productNameSelect').value = '';
+            document.getElementById('productBrandSelect').value = '';            document.getElementById('productModelInput').value = '';
+            document.getElementById('productNameInput').value = '';
             document.getElementById('productPriceInput').value = '';
             document.getElementById('productExtraInput').value = '';
 
@@ -662,8 +613,8 @@
                 if (p) {
                     idInput.value = p.id;
                     document.getElementById('productBrandSelect').value = p.brandId || '';
-                    document.getElementById('productModelSelect').value = p.model;
-                    document.getElementById('productNameSelect').value = p.name || '';
+                    document.getElementById('productModelInput').value = p.model;
+                    document.getElementById('productNameInput').value = p.name || '';
                     document.getElementById('productPriceInput').value = p.price != null ? p.price : '';
                     document.getElementById('productExtraInput').value = p.extraValue != null ? p.extraValue : '';
                     sel.value = p.categoryId || '';
@@ -694,10 +645,10 @@
             const brandObj = app.brands.find(b => b.id === brandId);
             const brandName = brandObj ? brandObj.name : '';
 
-            const model = document.getElementById('productModelSelect').value.trim();
+            const model = document.getElementById('productModelInput').value.trim();
             if (!model) return toast('请输入规格');
 
-            const name = document.getElementById('productNameSelect').value.trim();
+            const name = document.getElementById('productNameInput').value.trim();
             const priceRaw = document.getElementById('productPriceInput').value;
             const price = priceRaw !== '' ? parseFloat(priceRaw) : null;
             const extraValue = document.getElementById('productExtraInput').value.trim() || null;
