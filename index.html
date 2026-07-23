@@ -621,7 +621,7 @@
             const rows = products.map(p => {
                 const extraTd = hasExtra ? `<td>${escHtml(p.extraValue != null ? p.extraValue : '-')}</td>` : '';
                 return `<tr onclick="openImageModal('${escAttr(p.id)}')" style="cursor:pointer;" title="点击查看/上传图片">
-                    <td><code>${escHtml(p.id)}</code> <span class="img-badge" data-pid="${escAttr(p.id)}" style="font-size:.7rem;"></span></td>
+                    <td><code>${escHtml(p.id)}</code></td>
                     <td><strong>${escHtml(p.brand || '-')}</strong></td>
                     <td>${escHtml(p.model)}</td>
                     <td>${escHtml(p.name || '-')}</td>
@@ -643,13 +643,6 @@
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
-            // 异步加载图片计数
-            products.forEach(p => {
-                getImageCount(p.id).then(count => {
-                    const badge = document.querySelector(`.img-badge[data-pid="${p.id}"]`);
-                    if (badge && count > 0) badge.textContent = '🖼️' + count;
-                }).catch(() => {});
-            });
         }
 
         function updateMainHeader() {
