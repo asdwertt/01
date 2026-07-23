@@ -237,6 +237,32 @@
         </div>
     </div>
 
+    <!-- Image Modal -->
+    <div class="modal-overlay" id="imageModal" style="display:none">
+        <div class="modal" style="width:700px;max-width:95vw;">
+            <h3 id="imageModalTitle">📷 商品图片</h3>
+            <div id="imageProductInfo" style="font-size:.85rem;color:var(--text-muted);margin-bottom:16px;"></div>
+
+            <div id="imageGallery" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;min-height:80px;align-items:center;">
+                <div id="noImageHint" style="color:var(--text-muted);text-align:center;width:100%;padding:40px;">
+                    <span style="font-size:3rem;display:block;margin-bottom:8px;">🖼️</span>暂无图片，点击下方按钮上传
+                </div>
+            </div>
+
+            <div style="display:flex;gap:10px;">
+                <label class="btn btn-primary btn-sm" style="cursor:pointer;">
+                    📤 上传图片
+                    <input type="file" id="imageFileInput" accept="image/*" multiple style="display:none;" onchange="handleImageUpload()">
+                </label>
+                <span style="font-size:.75rem;color:var(--text-muted);align-self:center;">支持所有图片格式，无大小限制</span>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-outline btn-sm" onclick="closeImageModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const STORAGE_KEY = 'product_mgr_data_v2';
 
@@ -249,6 +275,84 @@
         }
 
         function saveData(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+
+        // ──────────────── IndexedDB 图片存储 ────────────────
+        const IMG_DB_NAME = 'ProductImages';
+        const IMG_STORE = 'images';
+
+        function openImageDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(IMG_DB_NAME, 1);
+                req.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(IMG_STORE)) {
+                        const store = db.createObjectStore(IMG_STORE, { keyPath: 'id', autoIncrement: true });
+                        store.createIndex('productId', 'productId', { unique: false });
+                    }
+                };
+                req.onsuccess = (e) => resolve(e.target.result);
+                req.onerror = (e) => reject(e.target.error);
+            });
+        }
+
+        async function getImages(productId) {
+            const db = await openImageDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(IMG_STORE, 'readonly');
+                const store = tx.objectStore(IMG_STORE);
+                const idx = store.index('productId');
+                const req = idx.getAll(productId);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function addImage(productId, file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    const db = await openImageDB();
+                    const tx = db.transaction(IMG_STORE, 'readwrite');
+                    const store = tx.objectStore(IMG_STORE);
+                    const record = {
+                        productId,
+                        name: file.name,
+                        type: file.type,
+                        size: file.size,
+                        data: reader.result,
+                        addedAt: Date.now()
+                    };
+                    const req = store.add(record);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                };
+                reader.onerror = () => reject(reader.error);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function deleteImage(imageId) {
+            const db = await openImageDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(IMG_STORE, 'readwrite');
+                const store = tx.objectStore(IMG_STORE);
+                const req = store.delete(imageId);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function getImageCount(productId) {
+            const db = await openImageDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(IMG_STORE, 'readonly');
+                const store = tx.objectStore(IMG_STORE);
+                const idx = store.index('productId');
+                const req = idx.count(productId);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
 
         let app = loadData();
         function persist() { saveData(app); }
@@ -399,8 +503,8 @@
             const extraTh = hasExtra ? th('extra', escHtml(extraField)) : '';
             const rows = products.map(p => {
                 const extraTd = hasExtra ? `<td>${escHtml(p.extraValue != null ? p.extraValue : '-')}</td>` : '';
-                return `<tr>
-                    <td><code>${escHtml(p.id)}</code></td>
+                return `<tr onclick="openImageModal('${escAttr(p.id)}')" style="cursor:pointer;" title="点击查看/上传图片">
+                    <td><code>${escHtml(p.id)}</code> <span class="img-badge" data-pid="${escAttr(p.id)}" style="font-size:.7rem;"></span></td>
                     <td><strong>${escHtml(p.brand || '-')}</strong></td>
                     <td>${escHtml(p.model)}</td>
                     <td>${escHtml(p.name || '-')}</td>
@@ -408,8 +512,8 @@
                     <td>${catMap[p.categoryId] || '未分类'}</td>
                     <td>${p.price != null ? '¥' + Number(p.price).toFixed(2) : '-'}</td>
                     <td>
-                        <button class="btn btn-outline btn-sm" onclick="openProductModal('${escAttr(p.id)}')" style="margin-right:4px">✎</button>
-                        <button class="btn-danger-sm" onclick="deleteProduct('${escAttr(p.id)}')">🗑</button>
+                        <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openProductModal('${escAttr(p.id)}')" style="margin-right:4px">✎</button>
+                        <button class="btn-danger-sm" onclick="event.stopPropagation();deleteProduct('${escAttr(p.id)}')">🗑</button>
                     </td>
                 </tr>`;
             }).join('');
@@ -422,6 +526,13 @@
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
+            // 异步加载图片计数
+            products.forEach(p => {
+                getImageCount(p.id).then(count => {
+                    const badge = document.querySelector(`.img-badge[data-pid="${p.id}"]`);
+                    if (badge && count > 0) badge.textContent = '🖼️' + count;
+                }).catch(() => {});
+            });
         }
 
         function updateMainHeader() {
@@ -760,6 +871,69 @@
             input.click();
         }
 
+        // ──────────────── Image Management ────────────────
+        let currentImageProductId = null;
+
+        async function openImageModal(productId) {
+            currentImageProductId = productId;
+            const p = app.products.find(p => p.id === productId);
+            if (p) {
+                document.getElementById('imageModalTitle').textContent = '📷 ' + (p.brand || '') + ' ' + p.model;
+                document.getElementById('imageProductInfo').textContent = 'ID: ' + p.id + ' | 品牌: ' + (p.brand || '-') + ' | 规格: ' + p.model;
+            }
+            document.getElementById('imageFileInput').value = '';
+            await renderImageGallery();
+            document.getElementById('imageModal').style.display = '';
+        }
+
+        function closeImageModal() {
+            document.getElementById('imageModal').style.display = 'none';
+            currentImageProductId = null;
+        }
+
+        async function renderImageGallery() {
+            const gallery = document.getElementById('imageGallery');
+            const hint = document.getElementById('noImageHint');
+            if (!currentImageProductId) return;
+            const images = await getImages(currentImageProductId);
+            if (images.length === 0) {
+                gallery.innerHTML = '';
+                gallery.appendChild(hint);
+                hint.style.display = '';
+                return;
+            }
+            hint.style.display = 'none';
+            gallery.innerHTML = images.map(img => `
+                <div style="position:relative;width:160px;height:160px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#f8fafc;flex-shrink:0;">
+                    <img src="${img.data}" alt="${escHtml(img.name)}" style="width:100%;height:100%;object-fit:cover;">
+                    <button onclick="deleteImageAndRefresh(${img.id})"
+                        style="position:absolute;top:4px;right:4px;background:rgba(239,68,68,.85);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:14px;line-height:1;"
+                        title="删除">×</button>
+                    <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);color:#fff;font-size:.65rem;padding:3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(img.name)}</div>
+                </div>
+            `).join('');
+        }
+
+        async function handleImageUpload() {
+            const input = document.getElementById('imageFileInput');
+            const files = input.files;
+            if (!files.length || !currentImageProductId) return;
+            for (const file of files) {
+                await addImage(currentImageProductId, file);
+            }
+            await renderImageGallery();
+            toast(`已上传 ${files.length} 张图片`);
+            renderTable(); // 刷新图片标记
+        }
+
+        async function deleteImageAndRefresh(imageId) {
+            if (!confirm('确定删除这张图片？')) return;
+            await deleteImage(imageId);
+            await renderImageGallery();
+            renderTable();
+            toast('图片已删除');
+        }
+
         function toast(msg) {
             const el = document.createElement('div');
             el.className = 'toast'; el.textContent = msg;
@@ -767,9 +941,10 @@
             setTimeout(() => el.remove(), 2200);
         }
 
-        document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeCategoryModal(); closeProductModal(); } });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeCategoryModal(); closeProductModal(); closeImageModal(); } });
         document.getElementById('categoryModal').addEventListener('click', function(e) { if (e.target === this) closeCategoryModal(); });
         document.getElementById('productModal').addEventListener('click', function(e) { if (e.target === this) closeProductModal(); });
+        document.getElementById('imageModal').addEventListener('click', function(e) { if (e.target === this) closeImageModal(); });
 
         renderAll();
     </script>
