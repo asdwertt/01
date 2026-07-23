@@ -469,11 +469,10 @@
                 <button class="btn btn-primary btn-sm" style="flex:1;" onclick="selectAllFilter('${colKey}')">全选</button>
             </div>`;
 
+            dd.onclick = (e) => e.stopPropagation(); // 面板内点击不冒泡
             document.body.appendChild(dd);
-            // 点击外部关闭
-            setTimeout(() => {
-                document.addEventListener('click', closeFilterDropdown, { once: true });
-            }, 0);
+            // 点击面板外部关闭
+            setTimeout(() => document.addEventListener('click', closeFilterDropdown, { once: true }), 0);
         }
 
         function updateFilter(col, val, checked) {
