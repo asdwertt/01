@@ -398,6 +398,58 @@
         let searchKeyword = '';
         let sortColumn = null;      // 'id' | 'brand' | 'model' | 'name' | 'extra' | 'category' | 'price'
         let sortDir = 'asc';        // 'asc' | 'desc'
+        let selectedIds = new Set(); // 批量删除选中
+
+        function clearSelection() { selectedIds = new Set(); renderTable(); }
+
+        function toggleSelectAll(checked) {
+            document.querySelectorAll('#tableWrap tbody input[type="checkbox"]').forEach(cb => {
+                cb.checked = checked;
+                if (checked) selectedIds.add(cb.dataset.pid);
+                else selectedIds.delete(cb.dataset.pid);
+            });
+            updateBatchBar();
+        }
+
+        function toggleSelectRow(id, checked) {
+            if (checked) { selectedIds.add(id); } else { selectedIds.delete(id); }
+            updateBatchBar();
+        }
+
+        function updateBatchBar() {
+            const bar = document.getElementById('batchBar');
+            if (!bar) return;
+            if (selectedIds.size > 0) {
+                bar.style.display = 'flex';
+                bar.querySelector('.count').textContent = `已选 ${selectedIds.size} 项`;
+            } else {
+                bar.style.display = 'none';
+            }
+        }
+
+        function batchDelete() {
+            if (selectedIds.size === 0) return;
+            if (!confirm(`确定删除选中的 ${selectedIds.size} 件商品？此操作不可恢复。`)) return;
+            app.products = app.products.filter(p => !selectedIds.has(p.id));
+            selectedIds = new Set();
+            persist();
+            renderAll();
+            toast(`已删除 ${selectedIds.size} 件商品`);
+        }
+
+        // 获取当前筛选后的商品列表（用于全选）
+        function getVisibleProductIds() {
+            let list = app.products;
+            if (selectedCategoryId !== null) list = list.filter(p => p.categoryId === selectedCategoryId);
+            if (searchKeyword) {
+                list = list.filter(p => {
+                    const ev = p.extraValue != null ? String(p.extraValue).toLowerCase() : '';
+                    return (p.id||'').toLowerCase().includes(searchKeyword)||(p.brand||'').toLowerCase().includes(searchKeyword)||(p.model||'').toLowerCase().includes(searchKeyword)||(p.name||'').toLowerCase().includes(searchKeyword)||ev.includes(searchKeyword);
+                });
+            }
+            list = applyFilters(list);
+            return list.map(p => p.id);
+        }
 
         function setSort(col) {
             if (sortColumn === col) {
@@ -620,7 +672,11 @@
             const extraTh = hasExtra ? th('extra', escHtml(extraField), false) : '';
             const rows = products.map(p => {
                 const extraTd = hasExtra ? `<td>${escHtml(p.extraValue != null ? p.extraValue : '-')}</td>` : '';
+                const checked = selectedIds.has(p.id) ? ' checked' : '';
                 return `<tr onclick="openImageModal('${escAttr(p.id)}')" style="cursor:pointer;" title="点击查看/上传图片">
+                    <td style="width:32px;padding:14px 6px;" onclick="event.stopPropagation()">
+                        <input type="checkbox" data-pid="${escAttr(p.id)}"${checked} onchange="toggleSelectRow('${escAttr(p.id)}',this.checked)" style="accent-color:var(--primary);">
+                    </td>
                     <td><code>${escHtml(p.id)}</code></td>
                     <td><strong>${escHtml(p.brand || '-')}</strong></td>
                     <td>${escHtml(p.model)}</td>
@@ -635,8 +691,15 @@
                 </tr>`;
             }).join('');
 
-            wrap.innerHTML = `<table>
+            wrap.innerHTML = `
+            <div id="batchBar" style="display:${selectedIds.size > 0 ? 'flex' : 'none'};align-items:center;gap:12px;padding:10px 18px;background:#fef3c7;border-radius:8px;margin-bottom:10px;font-size:.85rem;font-weight:600;">
+                <span class="count">已选 ${selectedIds.size} 项</span>
+                <button class="btn btn-outline btn-sm" onclick="clearSelection()">取消选择</button>
+                <button class="btn-danger-sm" style="background:#ef4444;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-weight:600;" onclick="batchDelete()">🗑 批量删除</button>
+            </div>
+            <table>
                 <thead><tr>
+                    <th style="width:32px;padding:14px 6px;"><input type="checkbox" onchange="toggleSelectAll(this.checked)" style="accent-color:var(--primary);"></th>
                     ${th('id','ID')}${th('brand','品牌',true)}${th('model','规格',true)}${th('name',escHtml(nameLabel),true)}
                     ${extraTh}
                     ${th('category','分类')}${th('price','价格')}<th>操作</th>
@@ -668,6 +731,7 @@
             document.getElementById('searchInput').value = '';
             searchKeyword = '';
             document.getElementById('clearBtn').style.display = 'none';
+            selectedIds = new Set();
             renderAll();
         }
 
