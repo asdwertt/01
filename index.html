@@ -784,11 +784,11 @@
             if (!cat) return;
             const linked = app.products.filter(p => p.categoryId === id).length;
             const msg = linked
-                ? `分类「${cat.name}」下有 ${linked} 件商品，删除分类后这些商品将变为"未分类"。确定删除？`
+                ? `分类「${cat.name}」下有 ${linked} 件商品，删除分类将同时删除这些商品。确定删除？`
                 : `确定删除分类「${cat.name}」？`;
             if (!confirm(msg)) return;
             app.categories = app.categories.filter(c => c.id !== id);
-            app.products.forEach(p => { if (p.categoryId === id) p.categoryId = null; });
+            app.products = app.products.filter(p => p.categoryId !== id);
             if (selectedCategoryId === id) selectedCategoryId = null;
             persist();
             renderAll();
