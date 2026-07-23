@@ -83,6 +83,8 @@
         table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--card); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
         th, td { padding: 14px 18px; text-align: left; font-size: .88rem; }
         th { background: #f8fafc; color: var(--text-muted); font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; border-bottom: 2px solid var(--border); white-space: nowrap; }
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { color: var(--primary); background: #eef2ff; }
         td { border-bottom: 1px solid #f1f5f9; }
         tr:last-child td { border-bottom: none; }
         tbody tr { transition: background .12s; }
@@ -261,6 +263,41 @@
 
         let selectedCategoryId = null;
         let searchKeyword = '';
+        let sortColumn = null;      // 'id' | 'brand' | 'model' | 'name' | 'extra' | 'category' | 'price'
+        let sortDir = 'asc';        // 'asc' | 'desc'
+
+        function setSort(col) {
+            if (sortColumn === col) {
+                sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = col;
+                sortDir = 'asc';
+            }
+            renderTable();
+        }
+
+        function sortProducts(list) {
+            if (!sortColumn) return list;
+            const dir = sortDir === 'asc' ? 1 : -1;
+            const catMap = {};
+            app.categories.forEach(c => { catMap[c.id] = c.name; });
+            return [...list].sort((a, b) => {
+                let va, vb;
+                switch (sortColumn) {
+                    case 'id':       va = (a.id || '').toLowerCase(); vb = (b.id || '').toLowerCase(); break;
+                    case 'brand':    va = (a.brand || '').toLowerCase(); vb = (b.brand || '').toLowerCase(); break;
+                    case 'model':    va = (a.model || '').toLowerCase(); vb = (b.model || '').toLowerCase(); break;
+                    case 'name':     va = (a.name || '').toLowerCase(); vb = (b.name || '').toLowerCase(); break;
+                    case 'extra':    va = (a.extraValue || '').toLowerCase(); vb = (b.extraValue || '').toLowerCase(); break;
+                    case 'category': va = (catMap[a.categoryId] || '').toLowerCase(); vb = (catMap[b.categoryId] || '').toLowerCase(); break;
+                    case 'price':    va = a.price != null ? a.price : -Infinity; vb = b.price != null ? b.price : -Infinity; break;
+                    default: return 0;
+                }
+                if (va < vb) return -1 * dir;
+                if (va > vb) return 1 * dir;
+                return 0;
+            });
+        }
 
         // 获取当前选中分类的 extraField
         function getCurrentExtraField() {
@@ -346,10 +383,18 @@
                 return;
             }
 
+            // 排序
+            products = sortProducts(products);
+
             const catMap = {};
             app.categories.forEach(c => { catMap[c.id] = c.name; });
 
-            const extraTh = hasExtra ? `<th>${escHtml(extraField)}</th>` : '';
+            function th(col, label) {
+                const arrow = sortColumn === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+                return `<th class="sortable" onclick="setSort('${col}')">${label}${arrow}</th>`;
+            }
+
+            const extraTh = hasExtra ? th('extra', escHtml(extraField)) : '';
             const rows = products.map(p => {
                 const extraTd = hasExtra ? `<td>${escHtml(p.extraValue != null ? p.extraValue : '-')}</td>` : '';
                 return `<tr>
@@ -369,9 +414,9 @@
 
             wrap.innerHTML = `<table>
                 <thead><tr>
-                    <th>ID</th><th>品牌</th><th>规格</th><th>${escHtml(nameLabel)}</th>
+                    ${th('id','ID')}${th('brand','品牌')}${th('model','规格')}${th('name',escHtml(nameLabel))}
                     ${extraTh}
-                    <th>分类</th><th>价格</th><th>操作</th>
+                    ${th('category','分类')}${th('price','价格')}<th>操作</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
