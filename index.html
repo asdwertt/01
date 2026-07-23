@@ -648,7 +648,6 @@
                 const p = app.products.find(p => p.id === id);
                 if (p) {
                     idInput.value = p.id;
-                    idInput.readOnly = true;
                     document.getElementById('productBrandSelect').value = p.brandId || '';
                     document.getElementById('productModelInput').value = p.model;
                     document.getElementById('productNameInput').value = p.name || '';
