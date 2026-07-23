@@ -603,16 +603,18 @@
             app.categories.forEach(c => { catMap[c.id] = c.name; });
 
             function th(col, label, filterable) {
-                let sortArrow = '';
+                let sortArrow = '<span style="font-size:.7rem;opacity:.3;margin-right:2px;">⇅</span>';
                 if (sortColumn === col) {
-                    sortArrow = sortDir === 'asc' ? ' ▲' : ' ▼';
+                    sortArrow = sortDir === 'asc'
+                        ? '<span style="font-size:.7rem;margin-right:2px;">▲</span>'
+                        : '<span style="font-size:.7rem;margin-right:2px;">▼</span>';
                 }
                 let filterIcon = '';
                 if (filterable) {
                     const hasFilter = filters[col] && filters[col].size > 0;
-                    filterIcon = `<span class="filter-icon${hasFilter ? ' active' : ''}" onclick="toggleFilter('${col}',event)" title="筛选" style="margin-left:6px;font-size:.75rem;">🔽</span>`;
+                    filterIcon = `<span class="filter-icon${hasFilter ? ' active' : ''}" onclick="toggleFilter('${col}',event)" title="筛选" style="margin-left:6px;">▼</span>`;
                 }
-                return `<th class="sortable" onclick="setSort('${col}')">${label}${sortArrow}${filterIcon}</th>`;
+                return `<th class="sortable" onclick="setSort('${col}')">${sortArrow}${label}${filterIcon}</th>`;
             }
 
             const extraTh = hasExtra ? th('extra', escHtml(extraField), false) : '';
