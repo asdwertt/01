@@ -243,7 +243,8 @@
             <h3 id="imageModalTitle">📷 商品图片</h3>
             <div id="imageProductInfo" style="font-size:.85rem;color:var(--text-muted);margin-bottom:16px;"></div>
 
-            <div id="imageGallery" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;min-height:80px;align-items:center;">
+            <div id="imageGallery" style="margin-bottom:16px;min-height:80px;">
+                <div id="imageCards" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;"></div>
                 <div id="noImageHint" style="color:var(--text-muted);text-align:center;width:100%;padding:40px;">
                     <span style="font-size:3rem;display:block;margin-bottom:8px;">🖼️</span>暂无图片，点击下方按钮上传
                 </div>
@@ -261,6 +262,14 @@
                 <button class="btn btn-outline btn-sm" onclick="closeImageModal()">关闭</button>
             </div>
         </div>
+    </div>
+
+    <!-- Image Lightbox -->
+    <div id="imageLightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:999;cursor:pointer;"
+         onclick="this.style.display='none'">
+        <img id="lightboxImg" src="" style="max-width:95vw;max-height:95vh;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);object-fit:contain;"
+             onclick="event.stopPropagation()">
+        <span style="position:absolute;top:20px;right:30px;color:#fff;font-size:2rem;cursor:pointer;">✕</span>
     </div>
 
     <script>
@@ -892,21 +901,23 @@
         }
 
         async function renderImageGallery() {
-            const gallery = document.getElementById('imageGallery');
+            const cards = document.getElementById('imageCards');
             const hint = document.getElementById('noImageHint');
             if (!currentImageProductId) return;
             const images = await getImages(currentImageProductId);
             if (images.length === 0) {
-                gallery.innerHTML = '';
-                gallery.appendChild(hint);
+                cards.innerHTML = '';
                 hint.style.display = '';
                 return;
             }
             hint.style.display = 'none';
-            gallery.innerHTML = images.map(img => `
-                <div style="position:relative;width:160px;height:160px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#f8fafc;flex-shrink:0;">
-                    <img src="${img.data}" alt="${escHtml(img.name)}" style="width:100%;height:100%;object-fit:cover;">
-                    <button onclick="deleteImageAndRefresh(${img.id})"
+            cards.innerHTML = images.map(img => `
+                <div class="img-card" style="position:relative;width:160px;height:160px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#f8fafc;flex-shrink:0;">
+                    <img src="${img.data}" alt="${escHtml(img.name)}"
+                        style="width:100%;height:100%;object-fit:cover;cursor:pointer;"
+                        onclick="event.stopPropagation();document.getElementById('lightboxImg').src='${img.data.replace(/'/g,"\\'")}';document.getElementById('imageLightbox').style.display='';"
+                        title="点击放大">
+                    <button onclick="event.stopPropagation();deleteImageAndRefresh(${img.id})"
                         style="position:absolute;top:4px;right:4px;background:rgba(239,68,68,.85);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:14px;line-height:1;"
                         title="删除">×</button>
                     <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);color:#fff;font-size:.65rem;padding:3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(img.name)}</div>
