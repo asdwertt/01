@@ -658,6 +658,7 @@
             if (editingProductId) {
                 const p = app.products.find(p => p.id === editingProductId);
                 if (p) {
+                    p.id = customId;
                     p.brandId = brandId; p.brand = brandName;
                     p.model = model; p.name = name || null;
                     p.price = price; p.extraValue = extraValue;
