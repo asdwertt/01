@@ -240,7 +240,8 @@
 
             <!-- 动态额外字段 -->
             <label id="extraFieldLabel" style="display:none"></label>
-            <input id="productExtraInput" placeholder="" maxlength="50" style="display:none">
+            <input id="productExtraInput" list="extraList" placeholder="" maxlength="50" style="display:none">
+            <datalist id="extraList"></datalist>
 
             <label>价格（元）</label>
             <input id="productPriceInput" type="number" placeholder="0.00" step="0.01" min="0">
@@ -273,7 +274,7 @@
                     📤 上传图片
                     <input type="file" id="imageFileInput" accept="image/*" multiple style="display:none;" onchange="handleImageUpload()">
                 </label>
-                <span style="font-size:.75rem;color:var(--text-muted);align-self:center;">支持所有图片格式，无大小限制</span>
+                <span style="font-size:.75rem;color:var(--text-muted);align-self:center;">支持所有图片格式，可直接粘贴 Ctrl+V</span>
             </div>
 
             <div class="modal-actions">
@@ -284,10 +285,11 @@
 
     <!-- Image Lightbox -->
     <div id="imageLightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:999;cursor:pointer;"
-         onclick="this.style.display='none'">
-        <img id="lightboxImg" src="" style="max-width:95vw;max-height:95vh;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);object-fit:contain;"
+         onclick="closeLightbox()">
+        <img id="lightboxImg" src="" style="max-width:95vw;max-height:95vh;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(1);object-fit:contain;cursor:grab;"
              onclick="event.stopPropagation()">
         <span style="position:absolute;top:20px;right:30px;color:#fff;font-size:2rem;cursor:pointer;">✕</span>
+        <div id="zoomLabel" style="display:none;position:absolute;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:#fff;padding:6px 16px;border-radius:20px;font-size:14px;pointer-events:none;"></div>
     </div>
 
     <script>
@@ -485,7 +487,7 @@
         }
 
         // ──────────────── Filter ────────────────
-        let filters = { brand: new Set(), model: new Set(), name: new Set() };
+        let filters = { brand: new Set(), model: new Set(), name: new Set(), extra: new Set(), category: new Set() };
         let activeFilterCol = null;
 
         function toggleFilter(col, event) {
@@ -501,14 +503,22 @@
             dd.style.top = (rect.bottom + 4) + 'px';
             dd.style.left = rect.left + 'px';
 
-            // 获取该列所有不重复值
+            // 获取该列所有不重复值（按当前类目过滤）
             const allVals = new Set();
             const colKey = col; // 'brand', 'model', 'name'
-            app.products.forEach(p => {
+            let sourceProducts = app.products;
+            if (selectedCategoryId !== null) {
+                sourceProducts = sourceProducts.filter(p => p.categoryId === selectedCategoryId);
+            }
+            const catMap = {};
+            app.categories.forEach(c => { catMap[c.id] = c.name; });
+            sourceProducts.forEach(p => {
                 let val = '';
                 if (colKey === 'brand') val = p.brand || '';
                 else if (colKey === 'model') val = p.model || '';
                 else if (colKey === 'name') val = p.name || '';
+                else if (colKey === 'extra') val = p.extraValue != null ? String(p.extraValue) : '';
+                else if (colKey === 'category') val = catMap[p.categoryId] || '';
                 if (val) allVals.add(val);
             });
             const sorted = [...allVals].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
@@ -555,9 +565,13 @@
         }
 
         function applyFilters(list) {
+            const catMap = {};
+            app.categories.forEach(c => { catMap[c.id] = c.name; });
             if (filters.brand.size > 0) list = list.filter(p => filters.brand.has(p.brand || ''));
             if (filters.model.size > 0) list = list.filter(p => filters.model.has(p.model || ''));
             if (filters.name.size > 0) list = list.filter(p => filters.name.has(p.name || ''));
+            if (filters.extra.size > 0) list = list.filter(p => filters.extra.has(p.extraValue != null ? String(p.extraValue) : ''));
+            if (filters.category.size > 0) list = list.filter(p => filters.category.has(catMap[p.categoryId] || ''));
             return list;
         }
 
@@ -669,7 +683,7 @@
                 return `<th class="sortable" onclick="setSort('${col}')">${sortArrow}${label}${filterIcon}</th>`;
             }
 
-            const extraTh = hasExtra ? th('extra', escHtml(extraField), false) : '';
+            const extraTh = hasExtra ? th('extra', escHtml(extraField), true) : '';
             const rows = products.map(p => {
                 const extraTd = hasExtra ? `<td>${escHtml(p.extraValue != null ? p.extraValue : '-')}</td>` : '';
                 const checked = selectedIds.has(p.id) ? ' checked' : '';
@@ -702,7 +716,7 @@
                     <th style="width:32px;padding:14px 6px;"><input type="checkbox" onchange="toggleSelectAll(this.checked)" style="accent-color:var(--primary);"></th>
                     ${th('id','ID')}${th('brand','品牌',true)}${th('model','规格',true)}${th('name',escHtml(nameLabel),true)}
                     ${extraTh}
-                    ${th('category','分类')}${th('price','价格')}<th>操作</th>
+                    ${th('category','分类',true)}${th('price','价格')}<th>操作</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
@@ -844,6 +858,17 @@
             dl.innerHTML = [...values].map(v => `<option value="${escAttr(v)}">`).join('');
         }
 
+        function fillExtraSelect(catId) {
+            const dl = document.getElementById('extraList');
+            const values = new Set();
+            if (catId) {
+                app.products.filter(p => p.categoryId === catId).forEach(p => {
+                    if (p.extraValue) values.add(p.extraValue);
+                });
+            }
+            dl.innerHTML = [...values].map(v => `<option value="${escAttr(v)}">`).join('');
+        }
+
         // ──────────────── Actions: Product ────────────────
         let editingProductId = null;
 
@@ -872,6 +897,55 @@
 
             fillModelSelect(catId);
             fillNameSelect(catId);
+            fillExtraSelect(catId);
+            autoFillNextId();
+        }
+
+        // ---- 智能ID推测：按分类从已有商品ID中识别前缀-编号模式，自动建议下一个ID ----
+        function suggestNextId(categoryId) {
+            // 匹配格式：字母前缀 + 可选分隔符(-/空格) + 数字，如 JDQ-001、SKU015、A100
+            var re = /^([A-Za-z\u4e00-\u9fff]+)[\s-]*(\d+)$/;
+            var groups = {}; // prefixUpper -> { max, width, sep, originalPrefix, count }
+            app.products.forEach(function(p) {
+                if (categoryId && p.categoryId !== categoryId) return; // 只统计同一分类
+                var m = p.id.match(re);
+                if (!m) return;
+                var rawPrefix = m[1];
+                var prefixKey = rawPrefix.toUpperCase();
+                var num = parseInt(m[2], 10);
+                var width = m[2].length;
+                var sep = '';
+                if (p.id.indexOf('-') !== -1) sep = '-';
+                else if (/\s/.test(p.id)) sep = ' ';
+                var entry = groups[prefixKey];
+                if (!entry) {
+                    groups[prefixKey] = { max: num, width: width, sep: sep, originalPrefix: rawPrefix, count: 1 };
+                } else {
+                    if (num > entry.max) {
+                        entry.max = num;
+                        entry.width = width;
+                        entry.sep = sep;
+                        entry.originalPrefix = rawPrefix;
+                    }
+                    entry.count++;
+                }
+            });
+            // 选出现次数最多的前缀
+            var best = null;
+            for (var k in groups) {
+                if (!best || groups[k].count > best.count) best = groups[k];
+            }
+            if (!best) return '';
+            var next = best.max + 1;
+            return best.originalPrefix + best.sep + String(next).padStart(best.width, '0');
+        }
+
+        // 根据当前选中的分类自动填入下一个ID（编辑模式下不触发）
+        function autoFillNextId() {
+            if (editingProductId) return;
+            var sel = document.getElementById('productCategorySelect');
+            var idInput = document.getElementById('productIdInput');
+            idInput.value = suggestNextId(sel.value || null);
         }
 
         function openProductModal(id) {
@@ -909,6 +983,7 @@
             }
 
             onProductCategoryChange();
+            autoFillNextId();
 
             document.getElementById('productModal').style.display = '';
             if (id) {
@@ -1103,7 +1178,7 @@
                 <div class="img-card" style="position:relative;width:160px;height:160px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#f8fafc;flex-shrink:0;">
                     <img src="${img.data}" alt="${escHtml(img.name)}"
                         style="width:100%;height:100%;object-fit:cover;cursor:pointer;"
-                        onclick="event.stopPropagation();document.getElementById('lightboxImg').src='${img.data.replace(/'/g,"\\'")}';document.getElementById('imageLightbox').style.display='';"
+                        onclick="event.stopPropagation();resetLightbox();var li=document.getElementById('lightboxImg');li.src='${img.data.replace(/'/g,"\\'")}';updateLightboxTransform();document.getElementById('imageLightbox').style.display='';"
                         title="点击放大">
                     <button onclick="event.stopPropagation();deleteImageAndRefresh(${img.id})"
                         style="position:absolute;top:4px;right:4px;background:rgba(239,68,68,.85);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:14px;line-height:1;"
@@ -1140,10 +1215,93 @@
             setTimeout(() => el.remove(), 2200);
         }
 
+        // 粘贴图片上传（仅在图片弹窗打开时生效）
+        document.addEventListener('paste', async function(e) {
+            const imageModal = document.getElementById('imageModal');
+            if (imageModal.style.display === 'none' || !currentImageProductId) return;
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            let pastedCount = 0;
+            for (const item of items) {
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    const file = item.getAsFile();
+                    if (!file) continue;
+                    await addImage(currentImageProductId, file);
+                    pastedCount++;
+                }
+            }
+            if (pastedCount > 0) {
+                await renderImageGallery();
+                toast(`已粘贴上传 ${pastedCount} 张图片`);
+                renderTable();
+            }
+        });
+
         document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeCategoryModal(); closeProductModal(); closeImageModal(); } });
         document.getElementById('categoryModal').addEventListener('click', function(e) { if (e.target === this) closeCategoryModal(); });
         document.getElementById('productModal').addEventListener('click', function(e) { if (e.target === this) closeProductModal(); });
         document.getElementById('imageModal').addEventListener('click', function(e) { if (e.target === this) closeImageModal(); });
+
+        // Lightbox 状态：缩放 + 拖拽平移
+        const lightboxState = { scale: 1, panX: 0, panY: 0, dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 };
+
+        function updateLightboxTransform() {
+            const s = lightboxState;
+            document.getElementById('lightboxImg').style.transform =
+                `translate(calc(-50% + ${s.panX}px), calc(-50% + ${s.panY}px)) scale(${s.scale})`;
+        }
+
+        function resetLightbox() {
+            const s = lightboxState;
+            s.scale = 1; s.panX = 0; s.panY = 0; s.dragging = false;
+        }
+
+        function closeLightbox() {
+            document.getElementById('imageLightbox').style.display = 'none';
+            resetLightbox();
+            document.getElementById('lightboxImg').style.cursor = 'grab';
+        }
+
+        // 鼠标滚轮缩放
+        document.getElementById('lightboxImg').addEventListener('wheel', function(e) {
+            e.preventDefault();
+            lightboxState.scale += e.deltaY < 0 ? 0.15 : -0.15;
+            lightboxState.scale = Math.max(0.2, Math.min(5, lightboxState.scale));
+            updateLightboxTransform();
+            const label = document.getElementById('zoomLabel');
+            label.textContent = Math.round(lightboxState.scale * 100) + '%';
+            label.style.display = '';
+            clearTimeout(this._zt);
+            this._zt = setTimeout(() => { label.style.display = 'none'; }, 800);
+        });
+
+        // 鼠标按住拖拽平移
+        document.getElementById('lightboxImg').addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            const s = lightboxState;
+            s.dragging = true;
+            s.startX = e.clientX;
+            s.startY = e.clientY;
+            s.startPanX = s.panX;
+            s.startPanY = s.panY;
+            this.style.cursor = 'grabbing';
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            const s = lightboxState;
+            if (!s.dragging) return;
+            s.panX = s.startPanX + (e.clientX - s.startX);
+            s.panY = s.startPanY + (e.clientY - s.startY);
+            updateLightboxTransform();
+        });
+
+        document.addEventListener('mouseup', function() {
+            const s = lightboxState;
+            if (!s.dragging) return;
+            s.dragging = false;
+            document.getElementById('lightboxImg').style.cursor = 'grab';
+        });
 
         renderAll();
     </script>
